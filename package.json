@@ -1,0 +1,22 @@
+{
+  "name": "amigo-oracao",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Verified derangement draw and confidential email delivery for a prayer-partner event",
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "scripts": {
+    "test": "node tests/invariants.js",
+    "status": "node --env-file=.env src/cli.js status",
+    "validate": "node --env-file=.env src/cli.js validate",
+    "email-test": "node --env-file=.env src/cli.js test",
+    "draw": "node --env-file=.env src/cli.js draw",
+    "send": "node --env-file=.env src/cli.js send",
+    "report": "node --env-file=.env src/cli.js report"
+  },
+  "optionalDependencies": {
+    "nodemailer": "^6.9.14"
+  }
+}
