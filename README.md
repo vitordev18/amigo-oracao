@@ -1,530 +1,382 @@
 # Amigo Oração
 
-Ferramenta de linha de comando para realizar o sorteio de um evento de Amigo
-Oração (mesma dinâmica do Amigo Secreto) e notificar cada participante por
-e-mail, de forma individual e confidencial.
+Command-line tool to run the draw for an *Amigo Oração* event (the same format as Secret Santa) and notify each participant by email, individually and confidentially.
 
-O sorteio é matematicamente verificado antes de qualquer mensagem sair, e o
-envio é resistente a falhas: se o processo for interrompido no meio, ele pode
-ser retomado sem duplicar mensagens e sem alterar o resultado já sorteado.
+The draw is mathematically verified before any message goes out, and sending is fault-tolerant: if the process is interrupted midway, it can be resumed without duplicating messages and without changing the result already drawn.
 
-Escrito em Node.js sem nenhuma dependência obrigatória.
+Written in Node.js with no required dependencies.
 
-> **Nota sobre idioma.** O código, os comandos e os nomes de arquivo estão em
-> inglês; as mensagens exibidas ao operador e o conteúdo dos e-mails estão em
-> português. A documentação acompanha a segunda convenção.
+> **A note on language.** The code, commands, and filenames are in English; the messages shown to the operator and the email content are in Portuguese.
 
 ---
 
-## Guia rápido
+## Quick start
 
-Perdeu o fio da meada? Este comando responde onde você está e o que fazer:
+Lost track of where you are? This command tells you where you stand and what to do next:
 
 ```
 node --env-file=.env src/cli.js status
 ```
 
-A sequência completa, em ordem:
+The full sequence, in order:
 
-| # | Comando | O que faz | Confirme antes de seguir |
+| # | Command | What it does | Confirm before moving on |
 |---|---|---|---|
-| 1 | `validate --mx` | confere a lista | zero erros bloqueantes |
-| 2 | `test --to voce@email.com` | manda uma amostra para você | chegou, não foi para o spam, acentos e logo corretos |
-| 3 | `draw` | sorteia e sela o resultado | o total de participantes bate |
-| 4 | `send` | **simula** o envio | o tamanho da fila e os destinatários |
-| 5 | `send --confirm` | envia de verdade | o resumo final não lista falhas |
-| 6 | `report` | situação de cada pessoa | — |
+| 1 | `validate --mx` | checks the list | zero blocking errors |
+| 2 | `test --to you@email.com` | sends a sample to yourself | it arrived, didn't land in spam, accents and logo correct |
+| 3 | `draw` | draws and seals the result | the participant count matches |
+| 4 | `send` | **simulates** the send | the queue size and the recipients |
+| 5 | `send --confirm` | actually sends | the final summary lists no failures |
+| 6 | `report` | status of each person | — |
 
-Todos são precedidos de `node --env-file=.env src/cli.js`. As etapas 1 e 2 podem
-ser repetidas à vontade: nenhuma das duas grava arquivo nem altera o sorteio.
+All are prefixed with `node --env-file=.env src/cli.js`. Steps 1 and 2 can be repeated freely: neither writes a file nor changes the draw.
 
-### Onde estou?
+### Where am I?
 
-Dá para descobrir só olhando a pasta `output/`:
+You can tell just by looking at the `output/` folder:
 
-| Situação | Você está antes da etapa |
+| Situation | You're before step |
 |---|---|
-| `output/` vazia | 3 — ainda não sorteou |
-| existe `draw.json`, não existe `sends.jsonl` | 4 — sorteado, nada enviado |
-| existem os dois | 5 ou 6 — rode `report` para ver quem falta |
+| `output/` empty | 3 — not drawn yet |
+| `draw.json` exists, `sends.jsonl` doesn't | 4 — drawn, nothing sent |
+| both exist | 5 or 6 — run `report` to see who's left |
 
-O comando `status` faz essa leitura por você e ainda imprime o comando seguinte.
+The `status` command does this reading for you and also prints the next command.
 
-### Testando com uma lista de mentira
+### Testing with a fake list
 
-Para ensaiar o fluxo inteiro recebendo tudo na sua própria caixa, use
-sub-endereços: o Gmail ignora o que vem depois do `+` na entrega, mas o
-validador os trata como endereços distintos.
+To rehearse the whole flow while receiving everything in your own inbox, use sub-addresses: Gmail ignores anything after the `+` when delivering, but the validator treats them as distinct addresses.
 
 ```csv
 name,email,exclude
-Ana Teste,voce+ana@gmail.com,
-João Teste,voce+joao@gmail.com,
-Maria Teste,voce+maria@gmail.com,
+Ana Test,you+ana@gmail.com,
+João Test,you+joao@gmail.com,
+Maria Test,you+maria@gmail.com,
 ```
 
 ---
 
-## O problema
+## The problem
 
-Um sorteio desse tipo parece trivial e não é. Três coisas costumam dar errado:
+A draw like this looks trivial and isn't. Three things tend to go wrong:
 
-**O sorteio em si.** Embaralhar uma lista não basta: é preciso garantir que
-ninguém tire a si mesmo, que ninguém seja tirado duas vezes e que ninguém fique
-de fora. Fazer isso "na mão" com papel funciona; fazer com código exige um
-algoritmo correto e uma verificação independente do resultado.
+**The draw itself.** Shuffling a list isn't enough: you have to guarantee that no one draws themselves, that no one is drawn twice, and that no one is left out. Doing it "by hand" with paper works; doing it with code requires a correct algorithm and an independent verification of the result.
 
-**A entrega dos e-mails.** Um endereço digitado errado, um domínio inexistente
-ou uma cota de provedor estourada fazem com que uma pessoa simplesmente não
-receba nada — e, sem registro, o organizador só descobre quando alguém reclama.
+**Email delivery.** A mistyped address, a nonexistent domain, or a blown provider quota means a person simply receives nothing — and, with no record, the organizer only finds out when someone complains.
 
-**A falha no meio do caminho.** Este é o mais grave. Se a conexão cair no
-participante 20 de 30 e o processo for reiniciado do zero, um novo sorteio é
-gerado e as dez pessoas que já haviam recebido passam a ter informação
-inconsistente com as vinte restantes. O evento fica corrompido de forma
-silenciosa e irreversível.
+**Failure midway.** This is the most serious one. If the connection drops at participant 20 of 30 and the process is restarted from scratch, a new draw is generated and the ten people who had already received become inconsistent with the remaining twenty. The event is silently and irreversibly corrupted.
 
-Este projeto trata os três casos explicitamente.
+This project handles all three cases explicitly.
 
 ---
 
-## Princípios de projeto
+## Design principles
 
-**Sorteio e envio são fases separadas.** O resultado é gravado em disco e selado
-*antes* do primeiro e-mail. O comando de envio nunca sorteia; ele apenas lê o
-que já foi decidido. Isso torna a retomada segura por construção.
+**Draw and send are separate phases.** The result is written to disk and sealed *before* the first email. The send command never draws; it only reads what has already been decided. This makes resumption safe by construction.
 
-**Falhar cedo e alto.** Erros na lista de participantes interrompem a execução
-antes do sorteio, não durante o envio. Cada etapa é uma porta que só abre se a
-anterior passou.
+**Fail early and loud.** Errors in the participant list stop execution before the draw, not during sending. Each step is a door that only opens if the previous one passed.
 
-**O estado vive no disco, não na memória.** Cada envio é registrado
-imediatamente após acontecer. Uma queda de energia perde no máximo o registro em
-andamento.
+**State lives on disk, not in memory.** Each send is recorded immediately after it happens. A power loss loses at most the record in progress.
 
-**Nada é irreversível sem confirmação explícita.** O comando de envio simula por
-padrão; só envia de verdade com uma flag adicional. O sorteio se recusa a
-sobrescrever um resultado existente.
+**Nothing is irreversible without explicit confirmation.** The send command simulates by default; it only sends for real with an additional flag. The draw refuses to overwrite an existing result.
 
-**Aleatoriedade criptográfica.** O embaralhamento usa `crypto.randomInt`
-(CSPRNG), nunca `Math.random()`, cuja sequência é previsível.
+**Cryptographic randomness.** The shuffle uses `crypto.randomInt` (CSPRNG), never `Math.random()`, whose sequence is predictable.
 
 ---
 
-## Arquitetura
+## Architecture
 
 ```
 participants.csv
        │
        ▼
-   [validate] ────────────────── DNS (opcional)
-       │  falha ⇒ para aqui
+   [validate] ────────────────── DNS (optional)
+       │  fails ⇒ stops here
        ▼
-   [draw] ─────▶ output/draw.json        (resultado selado + SHA-256)
+   [draw] ─────▶ output/draw.json        (sealed result + SHA-256)
        │
        ▼
    [send]  ────▶ Brevo / Resend / SMTP
        │
-       └───────▶ output/sends.jsonl      (log incremental, append-only)
+       └───────▶ output/sends.jsonl      (incremental log, append-only)
                         │
                         ▼
                     [report]
 ```
 
-O comando `test` fica fora desse fluxo: ele valida a configuração de envio de
-forma isolada, sem tocar na lista, no sorteio ou no log.
+The `test` command sits outside this flow: it validates the send configuration in isolation, without touching the list, the draw, or the log.
 
-### Estrutura de arquivos
+### File structure
 
 ```
 amigo-oracao/
-├── participants.csv           entrada: name, email, exclude
-├── participants.example.csv   modelo com dados fictícios
-├── .env                       configuração e credenciais (não versionar)
+├── participants.csv           input: name, email, exclude
+├── participants.example.csv   template with fictional data
+├── .env                       configuration and credentials (do not commit)
 ├── assets/
-│   └── logo.png               imagem exibida no cabeçalho do e-mail
+│   └── logo.png               image shown in the email header
 ├── src/
-│   ├── cli.js                 interpretação dos comandos e orquestração
-│   ├── participants.js        leitura do CSV e validação da lista
-│   ├── draw.js                algoritmo de desarranjo e verificação formal
-│   ├── template.js            corpo do e-mail (HTML e texto puro)
-│   ├── mailer.js              provedores de envio, classificação de erro e retry
-│   ├── dispatch.js            fila, log incremental e lógica de retomada
-│   └── utils.js               parser de CSV, utilidades de terminal
+│   ├── cli.js                 command parsing and orchestration
+│   ├── participants.js        CSV reading and list validation
+│   ├── draw.js                derangement algorithm and formal verification
+│   ├── template.js            email body (HTML and plain text)
+│   ├── mailer.js              send providers, error classification and retry
+│   ├── dispatch.js            queue, incremental log and resume logic
+│   └── utils.js               CSV parser, terminal utilities
 ├── tests/
-│   └── invariants.js          prova das invariantes do sorteio
+│   └── invariants.js          proof of the draw invariants
 └── output/
-    ├── draw.json              resultado selado (confidencial, substituível)
-    └── sends.jsonl            log de envios, acumulativo (não contém os pares)
+    ├── draw.json              sealed result (confidential, replaceable)
+    └── sends.jsonl            send log, cumulative (does not contain the pairs)
 ```
 
 ---
 
-## Garantias do sorteio
+## Draw guarantees
 
-O resultado é um **desarranjo**: uma permutação sem pontos fixos. As
-propriedades garantidas são:
+The result is a **derangement**: a permutation with no fixed points. The guaranteed properties are:
 
-| Propriedade | Significado |
+| Property | Meaning |
 |---|---|
-| σ(A) ≠ A | ninguém tira a si mesmo |
-| σ é bijeção | cada pessoa tira exatamente uma |
-| σ⁻¹ é bijeção | cada pessoa é tirada por exatamente uma |
-| \|σ\| = n | ninguém fica de fora, ninguém aparece duas vezes |
-| σ respeita restrições | pares vetados (casais, mesma casa) não ocorrem |
+| σ(A) ≠ A | no one draws themselves |
+| σ is a bijection | each person draws exactly one |
+| σ⁻¹ is a bijection | each person is drawn by exactly one |
+| \|σ\| = n | no one is left out, no one appears twice |
+| σ respects constraints | forbidden pairs (couples, same household) don't occur |
 
-Existem dois modos, escolhidos por configuração:
+There are two modes, chosen by configuration:
 
-**`cycle`** (padrão) — embaralha a lista e liga cada pessoa à seguinte, fechando
-uma única roda: A→B→C→…→A. Para n ≥ 2 é estruturalmente impossível haver ponto
-fixo, e o formato elimina pares recíprocos (A↔B), que em grupos pequenos
-entregam a surpresa de imediato. A distribuição é uniforme sobre os (n−1)!
-ciclos possíveis.
+**`cycle`** (default) — shuffles the list and links each person to the next, closing a single ring: A→B→C→…→A. For n ≥ 2 a fixed point is structurally impossible, and the format eliminates reciprocal pairs (A↔B), which in small groups give the surprise away immediately. The distribution is uniform over the (n−1)! possible cycles.
 
-**`free`** — desarranjo uniforme sobre todos os !n desarranjos, obtido por
-amostragem por rejeição. Aceita pares recíprocos e múltiplos ciclos. O número
-esperado de tentativas é aproximadamente *e* ≈ 2,72.
+**`free`** — uniform derangement over all !n derangements, obtained by rejection sampling. Allows reciprocal pairs and multiple cycles. The expected number of attempts is approximately *e* ≈ 2.72.
 
-Independentemente do modo, o resultado passa por uma **verificação formal**
-antes de ser gravado. Qualquer violação lança exceção e aborta o processo — o
-programa prefere não entregar resultado a entregar um resultado inválido.
+Regardless of the mode, the result goes through a **formal verification** before being written. Any violation throws an exception and aborts the process — the program prefers to deliver no result over delivering an invalid one.
 
-A suíte em `tests/invariants.js` exercita essas invariantes em milhares de
-sorteios, incluindo listas com restrições e um caso de restrição impossível,
-que deve falhar com mensagem clara em vez de devolver resultado degradado.
+The suite in `tests/invariants.js` exercises these invariants across thousands of draws, including lists with constraints and one impossible-constraint case, which must fail with a clear message instead of returning a degraded result.
 
 ---
 
-## Garantias de entrega
+## Delivery guarantees
 
-**Validação prévia da lista.** Campos obrigatórios, sintaxe do endereço,
-duplicidade, alvos de restrição inexistentes e erros de digitação frequentes em
-domínios (`gmial.com`, `hotmial.com`, `outlok.com` e semelhantes). Opcionalmente
-consulta o DNS para confirmar que o domínio aceita correio.
+**Upfront list validation.** Required fields, address syntax, duplicates, nonexistent constraint targets, and common domain typos (`gmial.com`, `hotmial.com`, `outlok.com`, and the like). Optionally queries DNS to confirm the domain accepts mail.
 
-**Classificação de erro no envio.** Respostas 4xx (exceto 429) são tratadas como
-permanentes: o programa não insiste, registra e segue. Respostas 429, 5xx e
-falhas de rede são temporárias e disparam nova tentativa com espera exponencial
-e jitter (1s → 2s → 4s → 8s).
+**Send-time error classification.** 4xx responses (except 429) are treated as permanent: the program doesn't insist, records it, and moves on. 429, 5xx, and network failures are temporary and trigger a retry with exponential backoff and jitter (1s → 2s → 4s → 8s).
 
-**Controle de ritmo.** Um intervalo configurável entre mensagens evita atingir o
-limite de requisições do provedor.
+**Rate control.** A configurable interval between messages avoids hitting the provider's rate limit.
 
-**Log incremental.** Cada resultado é gravado em `output/sends.jsonl` logo após
-o envio, em modo append. O formato JSONL é resistente a truncamento: uma linha
-corrompida por queda abrupta não invalida as demais.
+**Incremental log.** Each result is written to `output/sends.jsonl` right after the send, in append mode. The JSONL format is resistant to truncation: a line corrupted by an abrupt crash doesn't invalidate the others.
 
-**Retomada idempotente, escopada por sorteio.** Ao reexecutar o envio, quem
-consta como `sent` é ignorado e quem consta como `failed` é tentado novamente.
-Rodar o comando duas vezes nunca duplica mensagens.
+**Idempotent resume, scoped per draw.** On re-running the send, anyone marked `sent` is skipped and anyone marked `failed` is retried. Running the command twice never duplicates messages.
 
-Cada registro do log carrega a impressão digital do sorteio que o originou, e a
-fila só considera os registros do sorteio corrente. Sem isso, um envio de teste
-antigo faria o sistema pular silenciosamente uma pessoa real que compartilhasse
-o mesmo endereço — o participante nunca receberia nada e ninguém perceberia. Os
-registros de outros sorteios são contabilizados e informados na tela, não
-descartados em silêncio.
+Each log record carries the fingerprint of the draw that produced it, and the queue only considers records from the current draw. Without this, an old test send would make the system silently skip a real person who shared the same address — the participant would never receive anything and no one would notice. Records from other draws are counted and reported on screen, not silently discarded.
 
-**Selo de integridade.** O `draw.json` carrega uma impressão digital SHA-256
-sobre endereços e nomes. Se o arquivo for editado manualmente, o envio é
-bloqueado antes da primeira mensagem.
+**Integrity seal.** The `draw.json` carries a SHA-256 fingerprint over addresses and names. If the file is edited by hand, sending is blocked before the first message.
 
-**Detecção de lista desatualizada.** Se o `participants.csv` mudar depois do
-sorteio, o envio é interrompido e mostra exatamente quem entrou ou saiu — em vez
-de ignorar em silêncio alguém que foi acrescentado à lista.
+**Stale-list detection.** If `participants.csv` changes after the draw, sending stops and shows exactly who was added or removed — instead of silently ignoring someone who was added to the list.
 
 ---
 
-## Referência de comandos
+## Command reference
 
-Todos seguem o formato:
+All follow the format:
 
 ```
-node --env-file=.env src/cli.js <comando> [flags]
+node --env-file=.env src/cli.js <command> [flags]
 ```
 
-Também existem atalhos via `npm run status`, `npm run validate`, `npm run draw`,
-`npm run send`, `npm run report` e `npm run email-test`. O `npm test` executa a
-suíte de invariantes, não envia e-mail.
+There are also shortcuts via `npm run status`, `npm run validate`, `npm run draw`, `npm run send`, `npm run report`, and `npm run email-test`. `npm test` runs the invariants suite; it doesn't send email.
 
 ### `status`
 
-Resume em que ponto do processo o projeto está e imprime o próximo comando a
-executar. Não altera nada — é seguro rodar a qualquer momento, inclusive no meio
-de um envio interrompido.
+Summarizes what point of the process the project is at and prints the next command to run. It changes nothing — safe to run at any time, including in the middle of an interrupted send.
 
-- **Lê:** `participants.csv`, `.env`, `output/draw.json`, `output/sends.jsonl`
-- **Grava:** nada
+- **Reads:** `participants.csv`, `.env`, `output/draw.json`, `output/sends.jsonl`
+- **Writes:** nothing
 
-Verifica quatro coisas em ordem: se a lista existe e está válida, se as
-credenciais estão configuradas, se já existe sorteio selado e quantos envios
-foram registrados. O próximo passo sugerido leva em conta o estado real dos
-arquivos — se houver falhas no log, por exemplo, ele aponta o reenvio dos
-pendentes em vez do envio completo.
+Checks four things in order: whether the list exists and is valid, whether credentials are configured, whether a sealed draw already exists, and how many sends have been recorded. The suggested next step accounts for the actual state of the files — if there are failures in the log, for example, it points to resending the pending ones instead of the full send.
 
 ### `validate`
 
-Confere a lista de participantes. É a porta de entrada do processo e não produz
-efeito colateral algum — não grava arquivos e não contata o provedor de e-mail.
+Checks the participant list. It's the entry gate of the process and produces no side effects — it doesn't write files and doesn't contact the email provider.
 
-- **Lê:** `participants.csv`
-- **Grava:** nada
-- **Rede:** somente DNS, e apenas com `--mx`
-- **Encerra com código 1** se houver erro bloqueante
+- **Reads:** `participants.csv`
+- **Writes:** nothing
+- **Network:** DNS only, and only with `--mx`
+- **Exits with code 1** if there's a blocking error
 
-Distingue duas severidades. *Erros bloqueantes* impedem o sorteio: nome ou
-e-mail vazio, sintaxe inválida, endereço duplicado, domínio com erro de
-digitação conhecido, lista com menos de dois participantes. *Avisos* são
-informativos e não interrompem: restrição apontando para alguém fora da lista,
-domínio sem registro MX, consulta de DNS inconclusiva.
+Distinguishes two severities. *Blocking errors* prevent the draw: empty name or email, invalid syntax, duplicate address, domain with a known typo, list with fewer than two participants. *Warnings* are informational and don't stop it: a constraint pointing to someone outside the list, a domain with no MX record, an inconclusive DNS query.
 
-Flag `--mx`: consulta os registros MX de cada domínio. Distingue resposta
-conclusiva do DNS (`ENODATA`, `ENOTFOUND`) de falha de consulta (timeout,
-SERVFAIL, rede corporativa) — só a primeira é atribuída ao endereço. Também
-aceita MX implícito: pela RFC 5321, um domínio com registro A recebe correio no
-próprio host.
+Flag `--mx`: queries the MX records of each domain. Distinguishes a conclusive DNS response (`ENODATA`, `ENOTFOUND`) from a query failure (timeout, SERVFAIL, corporate network) — only the former is attributed to the address. Also accepts implicit MX: per RFC 5321, a domain with an A record receives mail on the host itself.
 
 ### `test`
 
-Envia uma mensagem de amostra com dados fictícios para um endereço à sua
-escolha. É o único comando que exercita a cadeia completa de envio de forma
-isolada, e serve para validar credencial, autorização de IP, verificação do
-remetente e aparência da mensagem antes de qualquer envio real.
+Sends a sample message with fictional data to an address of your choice. It's the only command that exercises the full send chain in isolation, and it serves to validate credentials, IP authorization, sender verification, and message appearance before any real send.
 
-- **Lê:** `.env`
-- **Grava:** nada — não registra no log nem consome o sorteio
-- **Flag obrigatória:** `--to <endereço>`
+- **Reads:** `.env`
+- **Writes:** nothing — doesn't record to the log or consume the draw
+- **Required flag:** `--to <address>`
 
-O assunto recebe o prefixo `[TESTE]` e o conteúdo usa nomes fictícios, de modo
-que nenhum resultado verdadeiro é revelado.
+The subject gets a `[TESTE]` prefix and the content uses fictional names, so no real result is revealed.
 
 ### `draw`
 
-Executa o sorteio, verifica formalmente o resultado e o sela em disco.
+Runs the draw, formally verifies the result, and seals it to disk.
 
-- **Lê:** `participants.csv` e o modo configurado
-- **Grava:** `output/draw.json`
-- **Rede:** nenhuma
-- **Encerra com código 1** se a lista tiver erro bloqueante ou se já existir um
-  sorteio anterior
+- **Reads:** `participants.csv` and the configured mode
+- **Writes:** `output/draw.json`
+- **Network:** none
+- **Exits with code 1** if the list has a blocking error or if a previous draw already exists
 
-Recusa-se a sobrescrever um `draw.json` existente, porque refazer o sorteio
-depois que e-mails já saíram quebra a consistência do evento. A flag `--force`
-remove essa proteção e só deve ser usada quando se tem certeza de que nenhum
-envio foi feito.
+Refuses to overwrite an existing `draw.json`, because redoing the draw after emails have gone out breaks the event's consistency. The `--force` flag removes this protection and should only be used when you're certain no send has been made.
 
-Ao final imprime uma auditoria que comprova a validade do resultado **sem
-revelar os pares**: total de participantes, modo, número de tentativas,
-quantidade e tamanho dos ciclos, quantidade de pares recíprocos e a impressão
-digital. O organizador pode conferir que está tudo correto e ainda assim
-participar do evento sem saber de nada.
+At the end it prints an audit that proves the result's validity **without revealing the pairs**: total participants, mode, number of attempts, count and size of cycles, number of reciprocal pairs, and the fingerprint. The organizer can confirm everything is correct and still take part in the event knowing nothing.
 
 ### `send`
 
-Percorre o resultado selado e notifica cada participante.
+Walks through the sealed result and notifies each participant.
 
-- **Lê:** `output/draw.json`, `output/sends.jsonl`, `participants.csv` e `.env`
-- **Grava:** `output/sends.jsonl` (append, uma linha por tentativa)
-- **Encerra com código 1** se houver qualquer falha
+- **Reads:** `output/draw.json`, `output/sends.jsonl`, `participants.csv` and `.env`
+- **Writes:** `output/sends.jsonl` (append, one line per attempt)
+- **Exits with code 1** if there's any failure
 
-Antes de enviar, revalida as invariantes do sorteio, confere a impressão digital
-e compara a lista atual com a que foi sorteada; qualquer divergência interrompe
-a execução.
+Before sending, it revalidates the draw invariants, checks the fingerprint, and compares the current list with the one that was drawn; any divergence stops execution.
 
-**Simula por padrão.** Sem a flag `--confirm`, percorre toda a fila, exibe
-exatamente o que aconteceria e não contata o provedor nem grava no log. Com
-`--confirm`, envia de verdade.
+**Simulates by default.** Without the `--confirm` flag, it walks the entire queue, shows exactly what would happen, and doesn't contact the provider or write to the log. With `--confirm`, it sends for real.
 
-Monta a fila subtraindo quem já consta como `sent`. Ao final apresenta um resumo
-com o total, quantos foram pulados, quantos saíram agora e — o mais importante —
-a lista nominal de quem **não** recebeu, com o motivo de cada falha.
+Builds the queue by subtracting anyone already marked `sent`. At the end it presents a summary with the total, how many were skipped, how many went out now, and — most importantly — the named list of who did **not** receive, with the reason for each failure.
 
 ### `report`
 
-Exibe a situação individual de cada participante a partir do log.
+Shows the individual status of each participant from the log.
 
-- **Lê:** `output/sends.jsonl`
-- **Grava:** nada
+- **Reads:** `output/sends.jsonl`
+- **Writes:** nothing
 
-Consolida múltiplas tentativas do mesmo endereço mantendo a mais recente.
-Mostra nome, endereço, situação e, em caso de falha, a mensagem de erro
-retornada pelo provedor.
+Consolidates multiple attempts for the same address, keeping the most recent. Shows name, address, status, and, on failure, the error message returned by the provider.
 
-Considera apenas os registros do sorteio atualmente selado. Envios de sorteios
-anteriores permanecem no arquivo, mas não aparecem no relatório.
+Considers only the records from the currently sealed draw. Sends from previous draws remain in the file but don't appear in the report.
 
 ### `node tests/invariants.js`
 
-Executa a suíte de invariantes do algoritmo de sorteio. Não depende de
-configuração nem de rede. Útil após qualquer alteração em `src/draw.js`.
+Runs the invariants suite for the draw algorithm. Doesn't depend on configuration or network. Useful after any change to `src/draw.js`.
 
 ---
 
-## Sequência de execução
+## Execution sequence
 
-A ordem não é arbitrária: cada etapa é uma porta que valida uma classe distinta
-de problema, da mais barata de corrigir para a mais cara.
+The order isn't arbitrary: each step is a door that validates a distinct class of problem, from the cheapest to fix to the most expensive.
 
-A qualquer momento, `status` mostra em que ponto você parou.
+At any point, `status` shows where you left off.
 
-**1. `validate --mx`** — corrige problemas de dados enquanto ainda são só uma
-linha de planilha. Prossiga apenas com zero erros bloqueantes; leia os avisos e
-decida caso a caso.
+**1. `validate --mx`** — fixes data problems while they're still just a spreadsheet row. Proceed only with zero blocking errors; read the warnings and decide case by case.
 
-**2. `test --to <seu e-mail>`** — corrige problemas de configuração antes que
-eles afetem o grupo. Confirme que a mensagem chegou, que não foi para o spam,
-que a acentuação está correta, que a logo carregou e que o layout funciona no
-celular.
+**2. `test --to <your email>`** — fixes configuration problems before they affect the group. Confirm the message arrived, didn't go to spam, the accents are correct, the logo loaded, and the layout works on mobile.
 
-**3. `draw`** — a partir daqui o resultado está selado. Confira a auditoria
-impressa: o número de participantes deve bater com o esperado e o modo deve ser
-o desejado.
+**3. `draw`** — from here the result is sealed. Check the printed audit: the participant count should match what you expect and the mode should be the one you want.
 
-**4. `send`** — simulação. Confirme o tamanho da fila e a ausência de surpresas
-na lista de destinatários.
+**4. `send`** — simulation. Confirm the queue size and the absence of surprises in the recipient list.
 
-**5. `send --confirm`** — envio real. Acompanhe até o resumo final.
+**5. `send --confirm`** — real send. Follow along to the final summary.
 
-**6. `report`** — se houver falhas, corrija a causa e repita a etapa 5; somente
-os pendentes serão processados.
+**6. `report`** — if there are failures, fix the cause and repeat step 5; only the pending ones will be processed.
 
-**7. Encerramento** — após o evento, remova ou arquive `output/draw.json`, que é
-o único arquivo capaz de revelar os pares.
+**7. Wrap-up** — after the event, remove or archive `output/draw.json`, the only file capable of revealing the pairs.
 
-Uma recomendação operacional: execute as etapas 5 e 6 em uma única sessão, sem
-alternar rede ou VPN no meio. Provedores de e-mail costumam vincular a
-autorização ao endereço IP de origem, e uma troca durante o envio provoca falhas
-de autenticação na metade da fila. Se ocorrer, o processo é recuperável — mas é
-mais simples evitar.
+An operational recommendation: run steps 5 and 6 in a single session, without switching network or VPN midway. Email providers tend to tie authorization to the source IP address, and a switch during sending causes authentication failures halfway through the queue. If it happens, the process is recoverable — but it's simpler to avoid.
 
 ---
 
-## Os arquivos de saída
+## The output files
 
-Os dois arquivos em `output/` têm ciclos de vida opostos, e confundi-los é a
-origem de um erro difícil de perceber.
+The two files in `output/` have opposite life cycles, and confusing them is the source of a hard-to-spot bug.
 
-### `draw.json` — um só, substituído
+### `draw.json` — one only, replaced
 
-Existe no máximo um sorteio selado por vez. O comando `draw` se recusa a rodar
-quando o arquivo já existe; com `--force`, ele é **sobrescrito** e o resultado
-anterior se perde definitivamente. Não há versionamento nem backup automático.
+There is at most one sealed draw at a time. The `draw` command refuses to run when the file already exists; with `--force`, it is **overwritten** and the previous result is lost for good. There's no versioning or automatic backup.
 
-### `sends.jsonl` — acumulativo, nunca substituído
+### `sends.jsonl` — cumulative, never replaced
 
-Cada tentativa de envio acrescenta uma linha ao fim do arquivo. Nada é apagado,
-nem quando um novo sorteio é gerado. Isso é proposital: o log é a memória de
-quem já foi notificado, e apagá-lo durante um envio faria o sistema reenviar
-mensagens para quem já tinha recebido.
+Each send attempt appends a line to the end of the file. Nothing is deleted, not even when a new draw is generated. This is deliberate: the log is the memory of who has already been notified, and deleting it during a send would make the system resend messages to those who had already received.
 
-Cada linha é um objeto JSON independente:
+Each line is an independent JSON object:
 
-| Campo | Conteúdo |
+| Field | Content |
 |---|---|
-| `at` | data e hora da tentativa (ISO 8601) |
-| `draw` | impressão digital do sorteio que originou o envio |
-| `name`, `email` | destinatário |
-| `status` | `sent`, `failed` ou `simulated` |
-| `attempts` | quantas tentativas foram feitas |
-| `messageId` | identificador devolvido pelo provedor |
-| `error` | mensagem de erro, quando houver |
+| `at` | date and time of the attempt (ISO 8601) |
+| `draw` | fingerprint of the draw that produced the send |
+| `name`, `email` | recipient |
+| `status` | `sent`, `failed`, or `simulated` |
+| `attempts` | how many attempts were made |
+| `messageId` | identifier returned by the provider |
+| `error` | error message, when present |
 
-O campo `draw` é o que permite que registros de sorteios diferentes convivam no
-mesmo arquivo sem interferência. Registros gerados antes da introdução desse
-campo são tratados como pertencentes a outro sorteio — portanto ignorados.
+The `draw` field is what lets records from different draws coexist in the same file without interference. Records generated before this field was introduced are treated as belonging to another draw — and therefore ignored.
 
-### Entre um evento e outro
+### Between one event and the next
 
-Para começar do zero, apague os dois arquivos. Para manter histórico, renomeie
-antes de recomeçar (`draw-2026.json`, `sends-2026.jsonl`); o programa só lê os
-nomes padrão e ignora os demais.
+To start from scratch, delete both files. To keep history, rename them before starting over (`draw-2026.json`, `sends-2026.jsonl`); the program only reads the default names and ignores the rest.
 
-**Nunca apague `sends.jsonl` no meio de um envio real.** Sem ele, a retomada
-perde a noção de quem já recebeu e todos são notificados novamente.
+**Never delete `sends.jsonl` in the middle of a real send.** Without it, resumption loses track of who already received and everyone is notified again.
 
 ---
 
-## Configuração
+## Configuration
 
-Referência das variáveis lidas de `.env`.
+Reference for the variables read from `.env`.
 
-| Variável | Função |
+| Variable | Purpose |
 |---|---|
-| `PROVIDER` | `brevo`, `resend` ou `smtp` |
-| `BREVO_API_KEY` / `RESEND_API_KEY` | credencial do provedor via API |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | credenciais do modo SMTP |
-| `SENDER_NAME`, `SENDER_EMAIL` | identidade do remetente |
-| `REPLY_TO` | endereço de resposta |
-| `EVENT_NAME`, `REVEAL_DATE`, `VERSE` | conteúdo da mensagem |
-| `LOGO_URL` | URL pública da logo exibida no cabeçalho |
-| `DRAW_MODE` | `cycle` ou `free` |
-| `SEND_INTERVAL_MS` | espera entre envios |
-| `MAX_SEND_ATTEMPTS` | tentativas por destinatário antes de desistir |
-| `PARTICIPANTS_FILE` | caminho alternativo para o CSV |
+| `PROVIDER` | `brevo`, `resend` or `smtp` |
+| `BREVO_API_KEY` / `RESEND_API_KEY` | provider credential via API |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | SMTP-mode credentials |
+| `SENDER_NAME`, `SENDER_EMAIL` | sender identity |
+| `REPLY_TO` | reply-to address |
+| `EVENT_NAME`, `REVEAL_DATE`, `VERSE` | message content |
+| `LOGO_URL` | public URL of the logo shown in the header |
+| `DRAW_MODE` | `cycle` or `free` |
+| `SEND_INTERVAL_MS` | wait between sends |
+| `MAX_SEND_ATTEMPTS` | attempts per recipient before giving up |
+| `PARTICIPANTS_FILE` | alternative path to the CSV |
 
-O modo SMTP requer `npm install nodemailer`; os demais não exigem instalação.
+SMTP mode requires `npm install nodemailer`; the others require no installation.
 
-**Compatibilidade.** Os nomes anteriores em português continuam sendo aceitos
-como alternativa (`PROVEDOR`, `REMETENTE_EMAIL`, `EVENTO_NOME`, `MODO_SORTEIO`
-com valores `ciclo`/`livre`, entre outros), assim como o arquivo
-`participantes.csv` e os cabeçalhos `nome`/`excluir`. Configurações antigas
-seguem funcionando sem alteração.
+**Compatibility.** The earlier Portuguese names are still accepted as an alternative (`PROVEDOR`, `REMETENTE_EMAIL`, `EVENTO_NOME`, `MODO_SORTEIO` with values `ciclo`/`livre`, among others), as well as the `participantes.csv` file and the `nome`/`excluir` headers. Old configurations keep working unchanged.
 
-### Formato do CSV
+### CSV format
 
-Colunas `name`, `email` e `exclude`. A terceira é opcional e impede que
-determinadas pessoas se tirem mutuamente — útil para casais e membros da mesma
-casa. Aceita múltiplos endereços separados por `|`. O separador de colunas pode
-ser vírgula ou ponto e vírgula, detectado automaticamente. Arquivos gerados por
-planilhas devem ser salvos em UTF-8 para preservar a acentuação.
+Columns `name`, `email`, and `exclude`. The third is optional and prevents certain people from drawing each other — useful for couples and members of the same household. Accepts multiple addresses separated by `|`. The column separator can be a comma or a semicolon, detected automatically. Files generated by spreadsheets should be saved in UTF-8 to preserve accents.
 
-### Personalização da mensagem
+### Message customization
 
-O corpo do e-mail está isolado em `src/template.js`, em duas versões: HTML com
-estilos embutidos e texto puro. Ambas são enviadas juntas — clientes que não
-renderizam HTML exibem a alternativa em texto, o que também melhora a
-classificação antispam. **As duas devem ser editadas em conjunto:** alterar
-apenas uma faz o destinatário receber conteúdo diferente do revisado.
+The email body is isolated in `src/template.js`, in two versions: HTML with inline styles and plain text. Both are sent together — clients that don't render HTML show the text alternative, which also improves the antispam rating. **Both must be edited together:** changing only one makes the recipient receive content different from what was reviewed.
 
-A paleta fica concentrada na constante `BRAND`, no topo do arquivo. Trocar as
-cores da identidade visual é uma edição de um único bloco.
+The palette is concentrated in the `BRAND` constant at the top of the file. Changing the brand colors is a single-block edit.
 
-### Logo no cabeçalho
+### Logo in the header
 
-`LOGO_URL` precisa apontar para uma **URL pública e estável**. Imagens em base64
-ou anexadas não servem: Gmail e Outlook as bloqueiam. Se a variável estiver
-vazia, o cabeçalho é renderizado sem imagem e permanece íntegro — o layout não
-depende do carregamento da logo, já que muitos clientes bloqueiam imagens por
-padrão.
+`LOGO_URL` must point to a **public, stable URL**. Base64 or attached images won't work: Gmail and Outlook block them. If the variable is empty, the header renders without an image and stays intact — the layout doesn't depend on the logo loading, since many clients block images by default.
 
 ---
 
-## Segurança e privacidade
+## Security and privacy
 
-O sorteio nunca sai da máquina do organizador. Não há servidor, banco de dados
-nem serviço intermediário além do provedor de e-mail.
+The draw never leaves the organizer's machine. There's no server, database, or intermediary service beyond the email provider.
 
-`output/draw.json` é o único artefato que revela quem tirou quem. O log de
-envios registra apenas destinatário e situação, jamais o conteúdo do sorteio —
-de modo que ele pode ser compartilhado com outros organizadores sem estragar o
-evento.
+`output/draw.json` is the only artifact that reveals who drew whom. The send log records only recipient and status, never the draw content — so it can be shared with other organizers without spoiling the event.
 
-`.env`, `participants.csv` e `output/` estão listados no `.gitignore`. O `.env`
-contém credencial de API e nunca deve ser versionado, anexado ou compartilhado;
-o CSV contém nome e e-mail de terceiros e recebe o mesmo tratamento.
+`.env`, `participants.csv`, and `output/` are listed in `.gitignore`. The `.env` contains an API credential and must never be committed, attached, or shared; the CSV contains third parties' names and emails and gets the same treatment.
 
 ---
 
-## Códigos de saída
+## Exit codes
 
-| Código | Situação |
+| Code | Situation |
 |---|---|
-| 0 | sucesso |
-| 1 | erro de validação, de integridade, de configuração, ou falha em algum envio |
+| 0 | success |
+| 1 | validation, integrity, or configuration error, or a failure in some send |
 
-Adequado para encadeamento em scripts: `validate && draw`.
+Suitable for chaining in scripts: `validate && draw`.
 
-## Requisitos
+## Requirements
 
-Node.js 20.6 ou superior (a flag `--env-file` foi introduzida nessa versão).
-Nenhuma dependência obrigatória.
+Node.js 20.6 or higher (the `--env-file` flag was introduced in that version). No required dependencies.
