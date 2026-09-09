@@ -331,7 +331,7 @@ Reference for the variables read from `.env`.
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | SMTP-mode credentials |
 | `SENDER_NAME`, `SENDER_EMAIL` | sender identity |
 | `REPLY_TO` | reply-to address |
-| `EVENT_NAME`, `REVEAL_DATE`, `VERSE` | message content |
+| `EVENT_NAME`, `REVEAL_DATE`, `REVEAL_CLOCK`, `VERSE` | message content (`REVEAL_CLOCK` is optional: when set, the reveal time is appended to the date) |
 | `LOGO_URL` | public URL of the logo shown in the header |
 | `DRAW_MODE` | `cycle` or `free` |
 | `SEND_INTERVAL_MS` | wait between sends |

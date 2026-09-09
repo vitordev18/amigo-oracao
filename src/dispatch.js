@@ -54,6 +54,7 @@ export async function sendAll({ config, pairs, logPath, drawFingerprint, dryRun 
       friend: receiver.name,
       event: config.eventName,
       revealDate: config.revealDate,
+      revealClock: config.revealClock,
       verse: config.verse,
       logoUrl: config.logoUrl,
     };

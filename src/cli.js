@@ -39,6 +39,7 @@ function loadConfig({ requireCredentials = true } = {}) {
     replyTo: env('REPLY_TO', 'RESPONDER_PARA') || '',
     eventName: env('EVENT_NAME', 'EVENTO_NOME') || 'Amigo Oração',
     revealDate: env('REVEAL_DATE', 'DATA_REVELACAO') || '',
+    revealClock: env('REVEAL_CLOCK', 'HORARIO_REVELACAO') || '',
     verse: env('VERSE', 'VERSICULO') || '',
     logoUrl: env('LOGO_URL') || '',
     drawMode: (env('DRAW_MODE', 'MODO_SORTEIO') || 'cycle').toLowerCase(),
@@ -96,6 +97,7 @@ async function cmdTest(args) {
     friend: 'João Carlos da Silva',
     event: config.eventName,
     revealDate: config.revealDate,
+    revealClock: config.revealClock,
     verse: config.verse,
     logoUrl: config.logoUrl,
   };

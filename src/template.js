@@ -20,7 +20,7 @@ export function buildSubject({ name, event }) {
   return `${name}, chegou o resultado do ${event} 🙏`;
 }
 
-export function buildText({ name, friend, revealDate, verse }) {
+export function buildText({ name, friend, revealDate, revealClock, verse }) {
   return [
     `Olá, ${name}!`,
     '',
@@ -28,10 +28,15 @@ export function buildText({ name, friend, revealDate, verse }) {
     '',
     `>>> ${friend} <<<`,
     '',
-    'No dia da revelação traga uma mensagem (se possível) escrita a mão para',
-    'entregar junto com uma caixa de chocolates 🍫',
+    'Após orar um tempo (21 dias) por seu amigo, você terá a maravilhosa oportunidade de compartilhar pessoalmente uma mensagem da Palavra de Deus!',
+    'Formosos são os pés do que anuncia boas novas!',
     '',
-    revealDate ? `A revelação será em ${revealDate}. Até lá, guarde segredo! 🤫` : null,
+    'Traga também uma caixa de chocolates para presentear seu amigo oração no dia da revelação.',
+    revealDate ? '' : null,
+    revealDate
+      ? `A revelação será em ${revealDate}${revealClock ? ` às ${revealClock}` : ''}. ` +
+        'Até lá, guarde segredo! 🤫'
+      : null,
     verse ? '' : null,
     verse ? `"${verse}"` : null,
   ]
@@ -39,7 +44,7 @@ export function buildText({ name, friend, revealDate, verse }) {
     .join('\n');
 }
 
-export function buildHTML({ name, friend, event, revealDate, verse, logoUrl }) {
+export function buildHTML({ name, friend, event, revealDate, revealClock, verse, logoUrl }) {
   const e = escapeHTML;
   const b = BRAND;
 
@@ -59,7 +64,7 @@ export function buildHTML({ name, friend, event, revealDate, verse, logoUrl }) {
             <td width="5" style="background:${b.orange};font-size:0;line-height:0;">&nbsp;</td>
             <td style="padding:14px 18px;font-size:15px;line-height:1.6;color:${b.secretInk};">
               🤫 <strong>Guarde segredo!</strong> A revelação será em
-              <strong>${e(revealDate)}</strong>.
+              <strong>${e(revealDate)}</strong>${revealClock ? ` às <strong>${e(revealClock)}</strong>` : ''}.
             </td>
           </tr>
         </table>
@@ -141,8 +146,8 @@ export function buildHTML({ name, friend, event, revealDate, verse, logoUrl }) {
 
       <tr><td style="padding:26px 32px 22px;">
         <p style="margin:0;font-size:16px;line-height:1.65;color:${b.ink};">
-          No dia da revelação traga uma mensagem (se possível) escrita à mão para
-          entregar junto com uma caixa de chocolates 🍫
+          Após orar um tempo (21 dias) por seu amigo, você terá a maravilhosa oportunidade de compartilhar pessoalmente uma mensagem da Palavra de Deus!
+          Formosos são os pés do que anuncia boas novas! Traga também uma caixa de chocolates para presentear seu amigo oração no dia da revelação.
         </p>
       </td></tr>
 
