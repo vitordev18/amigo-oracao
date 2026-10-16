@@ -11,6 +11,7 @@
     "test": "node tests/invariants.js",
     "status": "node --env-file=.env src/cli.js status",
     "validate": "node --env-file=.env src/cli.js validate",
+    "preview": "node --env-file=.env src/cli.js preview",
     "email-test": "node --env-file=.env src/cli.js test",
     "draw": "node --env-file=.env src/cli.js draw",
     "send": "node --env-file=.env src/cli.js send",

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { loadParticipants, checkMX, printValidation } from './participants.js';
 import { draw, verifyDraw, drawStructure, fingerprint } from './draw.js';
 import { sendAll, saveDraw, readLog, printSummary } from './dispatch.js';
@@ -24,6 +24,7 @@ function resolveParticipantsFile() {
 const PARTICIPANTS_FILE = resolveParticipantsFile();
 const DRAW_FILE = path.join(ROOT, 'output', 'draw.json');
 const LOG_FILE = path.join(ROOT, 'output', 'sends.jsonl');
+const PREVIEW_FILE = path.join(ROOT, 'previa-email.html');
 
 function loadConfig({ requireCredentials = true } = {}) {
   const config = {
@@ -38,8 +39,8 @@ function loadConfig({ requireCredentials = true } = {}) {
     senderEmail: env('SENDER_EMAIL', 'REMETENTE_EMAIL'),
     replyTo: env('REPLY_TO', 'RESPONDER_PARA') || '',
     eventName: env('EVENT_NAME', 'EVENTO_NOME') || 'Amigo Oração',
-    revealDate: env('REVEAL_DATE', 'DATA_REVELACAO') || '',
-    revealClock: env('REVEAL_CLOCK', 'HORARIO_REVELACAO') || '',
+    revealDate: (env('REVEAL_DATE', 'DATA_REVELACAO') || '').trim(),
+    revealClock: (env('REVEAL_CLOCK', 'HORARIO_REVELACAO') || '').trim(),
     verse: env('VERSE', 'VERSICULO') || '',
     logoUrl: env('LOGO_URL') || '',
     drawMode: (env('DRAW_MODE', 'MODO_SORTEIO') || 'cycle').toLowerCase(),
@@ -85,14 +86,8 @@ async function cmdValidate(args) {
   if (result.errors.length) process.exit(1);
 }
 
-async function cmdTest(args) {
-  const config = loadConfig();
-  const target = args.to || args.para;
-  if (!target) {
-    console.error(color.error('\n✗ Informe o destino: --to voce@email.com\n'));
-    process.exit(1);
-  }
-  const context = {
+function sampleContext(config) {
+  return {
     name: 'Ana',
     friend: 'João Carlos da Silva',
     event: config.eventName,
@@ -101,6 +96,32 @@ async function cmdTest(args) {
     verse: config.verse,
     logoUrl: config.logoUrl,
   };
+}
+
+async function cmdPreview() {
+  const config = loadConfig({ requireCredentials: false });
+  const context = sampleContext(config);
+  await writeFile(PREVIEW_FILE, buildHTML(context));
+
+  console.log(color.bold('\nASSUNTO\n'));
+  console.log(`  ${buildSubject(context)}`);
+  console.log(color.bold('\nVERSÃO EM TEXTO\n'));
+  console.log(buildText(context).split('\n').map((line) => `  ${line}`).join('\n'));
+  console.log(color.ok(`\n✓ Prévia HTML gravada em ${PREVIEW_FILE}`));
+  if (!config.logoUrl) {
+    console.log(color.dim('  LOGO_URL vazio: o cabeçalho sai sem logo, igual ao e-mail real.'));
+  }
+  console.log(color.dim('  Abra o arquivo no navegador para conferir.\n'));
+}
+
+async function cmdTest(args) {
+  const config = loadConfig();
+  const target = args.to || args.para;
+  if (!target) {
+    console.error(color.error('\n✗ Informe o destino: --to voce@email.com\n'));
+    process.exit(1);
+  }
+  const context = sampleContext(config);
   console.log(color.info(`Enviando amostra para ${target} via ${config.provider}...`));
   const result = await sendWithRetry(config, {
     to: target,
@@ -338,6 +359,7 @@ const command = args._[0];
 const COMMANDS = {
   status: cmdStatus,
   validate: cmdValidate,
+  preview: cmdPreview,
   test: cmdTest,
   draw: cmdDraw,
   send: cmdSend,
@@ -353,11 +375,12 @@ ${color.bold('Amigo Oração')} — sorteio e envio confidencial
 
   ${color.dim('Sequência completa:')}
   node --env-file=.env src/cli.js ${color.info('validate')} [--mx]              1. confere a lista
-  node --env-file=.env src/cli.js ${color.info('test')} --to voce@email.com     2. amostra por e-mail
-  node --env-file=.env src/cli.js ${color.info('draw')} [--force]               3. sorteia e sela
-  node --env-file=.env src/cli.js ${color.info('send')}                         4. simula o envio
-  node --env-file=.env src/cli.js ${color.info('send')} --confirm               5. envia de verdade
-  node --env-file=.env src/cli.js ${color.info('report')}                       6. status por pessoa
+  node --env-file=.env src/cli.js ${color.info('preview')}                      2. prévia do e-mail (previa-email.html)
+  node --env-file=.env src/cli.js ${color.info('test')} --to voce@email.com     3. amostra por e-mail
+  node --env-file=.env src/cli.js ${color.info('draw')} [--force]               4. sorteia e sela
+  node --env-file=.env src/cli.js ${color.info('send')}                         5. simula o envio
+  node --env-file=.env src/cli.js ${color.info('send')} --confirm               6. envia de verdade
+  node --env-file=.env src/cli.js ${color.info('report')}                       7. status por pessoa
 `);
   process.exit(command ? 1 : 0);
 }

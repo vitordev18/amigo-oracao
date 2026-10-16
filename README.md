@@ -23,13 +23,14 @@ The full sequence, in order:
 | # | Command | What it does | Confirm before moving on |
 |---|---|---|---|
 | 1 | `validate --mx` | checks the list | zero blocking errors |
-| 2 | `test --to you@email.com` | sends a sample to yourself | it arrived, didn't land in spam, accents and logo correct |
-| 3 | `draw` | draws and seals the result | the participant count matches |
-| 4 | `send` | **simulates** the send | the queue size and the recipients |
-| 5 | `send --confirm` | actually sends | the final summary lists no failures |
-| 6 | `report` | status of each person | — |
+| 2 | `preview` | renders the email to `previa-email.html` | text, date and time read correctly |
+| 3 | `test --to you@email.com` | sends a sample to yourself | it arrived, didn't land in spam, accents and logo correct |
+| 4 | `draw` | draws and seals the result | the participant count matches |
+| 5 | `send` | **simulates** the send | the queue size and the recipients |
+| 6 | `send --confirm` | actually sends | the final summary lists no failures |
+| 7 | `report` | status of each person | — |
 
-All are prefixed with `node --env-file=.env src/cli.js`. Steps 1 and 2 can be repeated freely: neither writes a file nor changes the draw.
+All are prefixed with `node --env-file=.env src/cli.js`. Steps 1 to 3 can be repeated freely: none of them touches the draw or the send log.
 
 ### Where am I?
 
@@ -37,9 +38,9 @@ You can tell just by looking at the `output/` folder:
 
 | Situation | You're before step |
 |---|---|
-| `output/` empty | 3 — not drawn yet |
-| `draw.json` exists, `sends.jsonl` doesn't | 4 — drawn, nothing sent |
-| both exist | 5 or 6 — run `report` to see who's left |
+| `output/` empty | 4 — not drawn yet |
+| `draw.json` exists, `sends.jsonl` doesn't | 5 — drawn, nothing sent |
+| both exist | 6 or 7 — run `report` to see who's left |
 
 The `status` command does this reading for you and also prints the next command.
 
@@ -184,7 +185,7 @@ All follow the format:
 node --env-file=.env src/cli.js <command> [flags]
 ```
 
-There are also shortcuts via `npm run status`, `npm run validate`, `npm run draw`, `npm run send`, `npm run report`, and `npm run email-test`. `npm test` runs the invariants suite; it doesn't send email.
+There are also shortcuts via `npm run status`, `npm run validate`, `npm run preview`, `npm run draw`, `npm run send`, `npm run report`, and `npm run email-test`. `npm test` runs the invariants suite; it doesn't send email.
 
 ### `status`
 
@@ -207,6 +208,16 @@ Checks the participant list. It's the entry gate of the process and produces no 
 Distinguishes two severities. *Blocking errors* prevent the draw: empty name or email, invalid syntax, duplicate address, domain with a known typo, list with fewer than two participants. *Warnings* are informational and don't stop it: a constraint pointing to someone outside the list, a domain with no MX record, an inconclusive DNS query.
 
 Flag `--mx`: queries the MX records of each domain. Distinguishes a conclusive DNS response (`ENODATA`, `ENOTFOUND`) from a query failure (timeout, SERVFAIL, corporate network) — only the former is attributed to the address. Also accepts implicit MX: per RFC 5321, a domain with an A record receives mail on the host itself.
+
+### `preview`
+
+Renders the email with fictional names and the current `.env` values, writes the HTML to `previa-email.html`, and prints the subject and the plain-text version in the terminal. Open the file in a browser to review the layout.
+
+- **Reads:** `.env`
+- **Writes:** `previa-email.html` (generated, ignored by git)
+- **Network:** none
+
+The preview comes from the same functions used for the real send, so editing `src/template.js` is enough: run `preview` again to see the change. The logo only appears when `LOGO_URL` is set, exactly as in the real email.
 
 ### `test`
 
@@ -270,19 +281,21 @@ At any point, `status` shows where you left off.
 
 **1. `validate --mx`** — fixes data problems while they're still just a spreadsheet row. Proceed only with zero blocking errors; read the warnings and decide case by case.
 
-**2. `test --to <your email>`** — fixes configuration problems before they affect the group. Confirm the message arrived, didn't go to spam, the accents are correct, the logo loaded, and the layout works on mobile.
+**2. `preview`** — review the wording, date and time before anything leaves your machine.
 
-**3. `draw`** — from here the result is sealed. Check the printed audit: the participant count should match what you expect and the mode should be the one you want.
+**3. `test --to <your email>`** — fixes configuration problems before they affect the group. Confirm the message arrived, didn't go to spam, the accents are correct, the logo loaded, and the layout works on mobile.
 
-**4. `send`** — simulation. Confirm the queue size and the absence of surprises in the recipient list.
+**4. `draw`** — from here the result is sealed. Check the printed audit: the participant count should match what you expect and the mode should be the one you want.
 
-**5. `send --confirm`** — real send. Follow along to the final summary.
+**5. `send`** — simulation. Confirm the queue size and the absence of surprises in the recipient list.
 
-**6. `report`** — if there are failures, fix the cause and repeat step 5; only the pending ones will be processed.
+**6. `send --confirm`** — real send. Follow along to the final summary.
 
-**7. Wrap-up** — after the event, remove or archive `output/draw.json`, the only file capable of revealing the pairs.
+**7. `report`** — if there are failures, fix the cause and repeat step 6; only the pending ones will be processed.
 
-An operational recommendation: run steps 5 and 6 in a single session, without switching network or VPN midway. Email providers tend to tie authorization to the source IP address, and a switch during sending causes authentication failures halfway through the queue. If it happens, the process is recoverable — but it's simpler to avoid.
+**8. Wrap-up** — after the event, remove or archive `output/draw.json`, the only file capable of revealing the pairs.
+
+An operational recommendation: run steps 6 and 7 in a single session, without switching network or VPN midway. Email providers tend to tie authorization to the source IP address, and a switch during sending causes authentication failures halfway through the queue. If it happens, the process is recoverable — but it's simpler to avoid.
 
 ---
 
@@ -331,7 +344,7 @@ Reference for the variables read from `.env`.
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | SMTP-mode credentials |
 | `SENDER_NAME`, `SENDER_EMAIL` | sender identity |
 | `REPLY_TO` | reply-to address |
-| `EVENT_NAME`, `REVEAL_DATE`, `REVEAL_CLOCK`, `VERSE` | message content (`REVEAL_CLOCK` is optional: when set, the reveal time is appended to the date) |
+| `EVENT_NAME`, `REVEAL_DATE`, `REVEAL_CLOCK`, `VERSE` | message content. `REVEAL_DATE` is the day of the reveal, until which each person prays for their friend. `REVEAL_CLOCK` is optional: when set, the time is appended to the date; when empty or absent, the text mentions only the date |
 | `LOGO_URL` | public URL of the logo shown in the header |
 | `DRAW_MODE` | `cycle` or `free` |
 | `SEND_INTERVAL_MS` | wait between sends |
@@ -348,7 +361,7 @@ Columns `name`, `email`, and `exclude`. The third is optional and prevents certa
 
 ### Message customization
 
-The email body is isolated in `src/template.js`, in two versions: HTML with inline styles and plain text. Both are sent together — clients that don't render HTML show the text alternative, which also improves the antispam rating. **Both must be edited together:** changing only one makes the recipient receive content different from what was reviewed.
+The email body is isolated in `src/template.js`, in two versions: HTML with inline styles and plain text. Both are sent together — clients that don't render HTML show the text alternative, which also improves the antispam rating. The paragraphs shared by both versions live in constants at the top of the file, so most wording changes are a single edit. Run `preview` afterwards to review the result.
 
 The palette is concentrated in the `BRAND` constant at the top of the file. Changing the brand colors is a single-block edit.
 

@@ -16,6 +16,14 @@ const BRAND = {
   hairline: '#F0DED6',
 };
 
+const INTRO =
+  'Separe um tempo para orar por essa pessoa no secreto: pela vida, pela família e pelo ministério dela. ' +
+  'O propósito é crescermos em intimidade e união como ministério, cuidando uns dos outros em oração.';
+
+const LETTER =
+  'Se o seu coração desejar, prepare uma carta ou uma palavra do coração para entregar ao seu amigo ' +
+  'oração no dia da revelação. Não é obrigatório: o mais importante é a oração.';
+
 export function buildSubject({ name, event }) {
   return `${name}, chegou o resultado do ${event} 🙏`;
 }
@@ -24,17 +32,16 @@ export function buildText({ name, friend, revealDate, revealClock, verse }) {
   return [
     `Olá, ${name}!`,
     '',
-    'A pessoa que você vai apresentar em oração é:',
+    'A pessoa que você vai apresentar a Deus em oração, no secreto, é:',
     '',
     `>>> ${friend} <<<`,
     '',
-    'Após orar um tempo (21 dias) por seu amigo, você terá a maravilhosa oportunidade de compartilhar pessoalmente uma mensagem da Palavra de Deus!',
-    'Formosos são os pés do que anuncia boas novas!',
+    INTRO,
     '',
-    'Traga também uma caixa de chocolates para presentear seu amigo oração no dia da revelação.',
+    LETTER,
     revealDate ? '' : null,
     revealDate
-      ? `A revelação será em ${revealDate}${revealClock ? ` às ${revealClock}` : ''}. ` +
+      ? `Ore até a revelação, em ${revealDate}${revealClock ? ` às ${revealClock}` : ''}. ` +
         'Até lá, guarde segredo! 🤫'
       : null,
     verse ? '' : null,
@@ -63,7 +70,7 @@ export function buildHTML({ name, friend, event, revealDate, revealClock, verse,
           <tr>
             <td width="5" style="background:${b.orange};font-size:0;line-height:0;">&nbsp;</td>
             <td style="padding:14px 18px;font-size:15px;line-height:1.6;color:${b.secretInk};">
-              🤫 <strong>Guarde segredo!</strong> A revelação será em
+              🤫 <strong>Guarde segredo!</strong> Ore até a revelação, em
               <strong>${e(revealDate)}</strong>${revealClock ? ` às <strong>${e(revealClock)}</strong>` : ''}.
             </td>
           </tr>
@@ -129,7 +136,7 @@ export function buildHTML({ name, friend, event, revealDate, revealClock, verse,
           Olá, <strong>${e(name)}</strong>!
         </p>
         <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:${b.ink};">
-          A pessoa que você vai apresentar em oração é:
+          A pessoa que você vai apresentar a Deus em oração, no secreto, é:
         </p>
       </td></tr>
 
@@ -145,9 +152,11 @@ export function buildHTML({ name, friend, event, revealDate, revealClock, verse,
       </td></tr>
 
       <tr><td style="padding:26px 32px 22px;">
+        <p style="margin:0 0 14px;font-size:16px;line-height:1.65;color:${b.ink};">
+          ${e(INTRO)}
+        </p>
         <p style="margin:0;font-size:16px;line-height:1.65;color:${b.ink};">
-          Após orar um tempo (21 dias) por seu amigo, você terá a maravilhosa oportunidade de compartilhar pessoalmente uma mensagem da Palavra de Deus!
-          Formosos são os pés do que anuncia boas novas! Traga também uma caixa de chocolates para presentear seu amigo oração no dia da revelação.
+          ${e(LETTER)}
         </p>
       </td></tr>
 
